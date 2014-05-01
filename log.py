@@ -1,4 +1,4 @@
-import socket,os, pwd, grp, datetime, argparse, select, MySQLdb
+import socket,os, pwd, grp, datetime, argparse, select, MySQLdb, daemon, yaml
 
 
 def ip2n(ip):
@@ -93,19 +93,60 @@ def monitor_sockets(socks, logger):
         for sock in rd:
             read_socket(sock, logger)
 
-def main():
+def get_args():
     parser = argparse.ArgumentParser(description='Parse suricata DNS logs from \
             a unix socket and log queries to a MySQL database.')
-    parser.add_argument('-s','--socket', nargs='+', help='a unix dgram socket to monitor', required=True)
-    parser.add_argument('-u', '--user', help='user to drop to after creating the socket', required=True)
-    parser.add_argument('-g', '--group', help='group to drop to after creating the socket', required=True)
+    parser.add_argument('-c', '--config', help='path to configuration file', required=True)
+    parser.add_argument('-s', '--socket', nargs='+', help='a unix dgram socket to monitor', default=[])
+    parser.add_argument('-d', '--daemon', type=bool, default=False, help='daemonize')
+    parser.add_argument('-u', '--user', help='user to drop to after creating the socket')
+    parser.add_argument('-g', '--group', help='group to drop to after creating the socket')
 
-    args = parser.parse_args()
+    return parser.parse_args()
 
-    socks = init_sockets(args.socket, args.user, args.group)
-    drop_privileges(args.user, args.group)
+def read_config_file(path):
+    if not os.path.exists(path):
+        raise ValueError("Config file '%s' does not exist." % (path))
 
-    logger = MySQLQueryLogger('dnslog','shockwave','test','test')
+    config = yaml.load(open(path))
+
+    if 'mysql' not in config:
+        return 'config missing mysql configuration'
+
+    for value in ('db','user','pass','host'):
+        if value not in config['mysql']:
+            raise ValueError('missing mysql %s' % (value))
+
+    return config
+
+def merge_options(args, config):
+    config['user'] = args.user
+    config['group'] = args.group
+    config['daemon'] = args.daemon
+    
+    sock_paths = args.socket
+
+    if 'sockets' in config:
+        for path in config['sockets']:
+            if path not in sock_paths:
+                sock_paths.append(path)
+
+    if len(sock_paths) == 0:
+        raise ValueError('no sockets to read from')
+
+    config['sockets'] = sock_paths
+
+    return config
+
+def main():
+    args = get_args()
+    config = merge_options(args, read_config_file(args.config))
+
+    socks = init_sockets(config['sockets'], config['user'], config['group'])
+
+    drop_privileges(config['user'], config['group'])
+
+    logger = MySQLQueryLogger(config['mysql']['db'],config['mysql']['host'],config['mysql']['user'],config['mysql']['pass'])
 
     monitor_sockets(socks, logger)
 
