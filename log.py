@@ -33,7 +33,7 @@ def init_sockets(sock_paths, user, group):
 
 def parse_query_log(log_fields):
     query = {}
-    query['time'] = datetime.datetime.strptime(log_fields[0], '%m/%d/%Y-%H:%M:%S.%f')
+    query['time'] = datetime.datetime.strptime(log_fields[0], '%m/%d/%Y-%H:%M:%S.%f').strftime('%Y-%m-%d %H:%M:%S')
     query['name'] = log_fields[2]
     query['type'] = log_fields[3]
     src,dst = [x.strip() for x in log_fields[4].split('->', 1)]
