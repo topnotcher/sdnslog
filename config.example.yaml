@@ -1,0 +1,7 @@
+sockets:
+  - /var/log/suricata/dns.log
+mysql:
+  user: test
+  pass: test
+  db: dnslog
+  host: dbhost
