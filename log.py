@@ -34,6 +34,17 @@ def init_sockets(sock_paths, user, group):
 
     return socks
 
+def parse_query_log(log_fields):
+    query = {}
+    query['time'] = datetime.datetime.strptime(log_fields[0], '%m/%d/%Y-%H:%M:%S.%f')
+    query['name'] = log_fields[2]
+    query['type'] = log_fields[3]
+    src,dst = [x.strip() for x in log_fields[4].split('->', 1)]
+    query['src'], src_port = src.split(':',2)
+    query['dst'], dst_port = dst.split(':',2)
+
+    return query
+
 def read_socket(sock):
     dgm = sock.recv(1024)
 
@@ -44,16 +55,10 @@ def read_socket(sock):
     
     if not log[1].startswith('Query TX'): 
         return
-
-    time = datetime.datetime.strptime(log[0], '%m/%d/%Y-%H:%M:%S.%f')
-    name = log[2]
-    type = log[3]
-    src,dst = [x.strip() for x in log[4].split('->', 1)]
-    src_ip, src_port = src.split(':',2)
-    dst_ip, dst_port = dst.split(':',2)
     
+    query = parse_query_log(log)
 
-    print '%s %s %s %s -> %s' % (str(time), type, name, src_ip, dst_ip)
+    print '%s %s %s %s -> %s' % (str(query['time']), query['type'], query['name'], query['src'], query['dst'])
 
 def monitor_sockets(socks):
 
