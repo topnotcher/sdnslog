@@ -1,4 +1,4 @@
-import socket,os, pwd, grp, datetime, argparse, select, MySQLdb, daemon, yaml
+import socket,os, pwd, grp, datetime, argparse, select, MySQLdb, daemon, yaml, sys
 
 
 def ip2n(ip):
@@ -8,9 +8,16 @@ def ip2n(ip):
 class MySQLQueryLogger(object):
     def __init__(self, db, host, user, passwd):
         self.tbl = 'queries'
-        self.db = MySQLdb.connect(host=host, user=user, passwd=passwd, db=db)
-    
+        self.dbconfig = {'host': host, 'passwd': passwd, 'user': user, 'passwd': passwd, 'db': db}
+        self.db = None
+
+    def lazy_connect(self):
+        if self.db is None:
+            self.db = MySQLdb.connect(**self.dbconfig)
+
     def log_query(self,query):
+        self.lazy_connect()
+
         values = {
                 'src': ip2n(query['src']),
                 'dst': ip2n(query['dst']),
@@ -52,12 +59,12 @@ def init_sockets(sock_paths, user, group):
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
         sock.bind(path)
 
-        os.chown(path,get_uid(user),get_gid(group))
         os.chmod(path, 0700)
 
         socks.append(sock)
 
     return socks
+
 
 def parse_query_log(log_fields):
     query = {}
@@ -85,7 +92,11 @@ def read_socket(sock, logger):
 
     logger.log_query(query)
 
-def monitor_sockets(socks, logger):
+def monitor_sockets(config):
+    socks = init_sockets(config['sockets'], config['user'], config['group'])
+
+    logger = MySQLQueryLogger(config['mysql']['db'], config['mysql']['host'], \
+            config['mysql']['user'], config['mysql']['pass'])
 
     while True:
         rd,wr,err = select.select(socks, [], [])
@@ -98,7 +109,7 @@ def get_args():
             a unix socket and log queries to a MySQL database.')
     parser.add_argument('-c', '--config', help='path to configuration file', required=True)
     parser.add_argument('-s', '--socket', nargs='+', help='a unix dgram socket to monitor', default=[])
-    parser.add_argument('-d', '--daemon', type=bool, default=False, help='daemonize')
+    parser.add_argument('-d', '--daemon', action='store_true', default=False, help='daemonize')
     parser.add_argument('-u', '--user', help='user to drop to after creating the socket')
     parser.add_argument('-g', '--group', help='group to drop to after creating the socket')
 
@@ -142,15 +153,15 @@ def main():
     args = get_args()
     config = merge_options(args, read_config_file(args.config))
 
-    socks = init_sockets(config['sockets'], config['user'], config['group'])
+    if config['daemon']:
+        context = daemon.DaemonContext(uid=get_uid(config['user']), \
+                gid=get_gid(config['group']))
 
-    drop_privileges(config['user'], config['group'])
-
-    logger = MySQLQueryLogger(config['mysql']['db'],config['mysql']['host'],config['mysql']['user'],config['mysql']['pass'])
-
-    monitor_sockets(socks, logger)
+        with context: 
+            monitor_sockets(config)
+    else:
+        drop_privileges(config['user'], config['group'])
+        monitor_sockets(config)
 
 if __name__ == '__main__':
     main()
-
-
