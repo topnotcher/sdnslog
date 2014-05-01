@@ -1,4 +1,4 @@
-import socket,os, pwd, grp
+import socket,os, pwd, grp, datetime
 
 sock_path = '/var/run/suricata-megatron-dns.log'
 
@@ -40,8 +40,15 @@ def main():
         if not log[1].startswith('Query TX'): 
             continue
 
+        time = datetime.datetime.strptime(log[0], '%m/%d/%Y-%H:%M:%S.%f')
+        name = log[2]
+        type = log[3]
+        src,dst = [x.strip() for x in log[4].split('->', 1)]
+        src_ip, src_port = src.split(':',2)
+        dst_ip, dst_port = dst.split(':',2)
+        
 
-        print log
+        print '%s %s %s %s -> %s' % (str(time), type, name, src_ip, dst_ip)
 
 
 
