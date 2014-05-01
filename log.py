@@ -1,4 +1,4 @@
-import socket,os, pwd, grp, datetime, argparse
+import socket,os, pwd, grp, datetime, argparse, select
 
 sock_path = '/var/run/suricata-megatron-dns.log'
 
@@ -34,6 +34,35 @@ def init_sockets(sock_paths, user, group):
 
     return socks
 
+def read_socket(sock):
+    dgm = sock.recv(1024)
+
+    if not dgm:
+        return;
+
+    log = [x.strip() for x in dgm.strip().split('[**]')]
+    
+    if not log[1].startswith('Query TX'): 
+        return
+
+    time = datetime.datetime.strptime(log[0], '%m/%d/%Y-%H:%M:%S.%f')
+    name = log[2]
+    type = log[3]
+    src,dst = [x.strip() for x in log[4].split('->', 1)]
+    src_ip, src_port = src.split(':',2)
+    dst_ip, dst_port = dst.split(':',2)
+    
+
+    print '%s %s %s %s -> %s' % (str(time), type, name, src_ip, dst_ip)
+
+def monitor_sockets(socks):
+
+    while True:
+        rd,wr,err = select.select(socks, [], [])
+        
+        for sock in rd:
+            read_socket(sock)
+
 def main():
     parser = argparse.ArgumentParser(description='Parse suricata DNS logs from \
             a unix socket and log queries to a MySQL database.')
@@ -43,31 +72,10 @@ def main():
 
     args = parser.parse_args()
 
-    sock = init_sockets(args.socket, args.user, args.group)[0]
+    socks = init_sockets(args.socket, args.user, args.group)
     drop_privileges(args.user, args.group)
    
-    while True:
-        dgm = sock.recv(1024)
-        if not dgm:
-            break;
-
-        log = [x.strip() for x in dgm.strip().split('[**]')]
-        
-        if not log[1].startswith('Query TX'): 
-            continue
-
-        time = datetime.datetime.strptime(log[0], '%m/%d/%Y-%H:%M:%S.%f')
-        name = log[2]
-        type = log[3]
-        src,dst = [x.strip() for x in log[4].split('->', 1)]
-        src_ip, src_port = src.split(':',2)
-        dst_ip, dst_port = dst.split(':',2)
-        
-
-        print '%s %s %s %s -> %s' % (str(time), type, name, src_ip, dst_ip)
-
-
-
+    monitor_sockets(socks)
 
 if __name__ == '__main__':
     main()
