@@ -1,35 +1,51 @@
-import socket,os, pwd, grp, datetime
+import socket,os, pwd, grp, datetime, argparse
 
 sock_path = '/var/run/suricata-megatron-dns.log'
 
 
-def get_uid():
-    return pwd.getpwnam('suricata').pw_uid
+def get_uid(user):
+    return pwd.getpwnam(user).pw_uid
 
-def get_gid():
-    return grp.getgrnam('suricata').gr_gid
+def get_gid(group):
+    return grp.getgrnam(group).gr_gid
 
-def drop_root():
-    uid = get_uid()
-    gid = get_gid()
+def drop_privileges(user,group):
+    uid = get_uid(user)
+    gid = get_gid(group)
 
     os.setgroups([])
     os.setgid(gid)
     os.setuid(uid)
-    
+
+def init_sockets(sock_paths, user, group):
+    socks = []
+
+    for path in sock_paths:
+        if os.path.exists(sock_path):
+            os.remove(sock_path)
+
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+        sock.bind(path)
+
+        os.chown(path,get_uid(user),get_gid(group))
+        os.chmod(path, 0700)
+
+        socks.append(sock)
+
+    return socks
 
 def main():
-    if os.path.exists(sock_path):
-        os.remove(sock_path)
+    parser = argparse.ArgumentParser(description='Parse suricata DNS logs from \
+            a unix socket and log queries to a MySQL database.')
+    parser.add_argument('-s','--socket', nargs='+', help='a unix dgram socket to monitor', required=True)
+    parser.add_argument('-u', '--user', help='user to drop to after creating the socket', required=True)
+    parser.add_argument('-g', '--group', help='group to drop to after creating the socket', required=True)
 
+    args = parser.parse_args()
 
-    sock = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
-    sock.bind(sock_path)
-
-    os.chown(sock_path,get_uid(),get_gid())
-    os.chmod(sock_path, 0700)
-
-
+    sock = init_sockets(args.socket, args.user, args.group)[0]
+    drop_privileges(args.user, args.group)
+   
     while True:
         dgm = sock.recv(1024)
         if not dgm:
