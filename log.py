@@ -1,4 +1,32 @@
-import socket,os, pwd, grp, datetime, argparse, select
+import socket,os, pwd, grp, datetime, argparse, select, MySQLdb
+
+
+def ip2n(ip):
+    octets = ip.split('.')
+    return sum([(int(octets[x]))<<(24-(8*x)) for x in range(0,4)])
+
+class MySQLQueryLogger(object):
+    def __init__(self, db, host, user, passwd):
+        self.tbl = 'queries'
+        self.db = MySQLdb.connect(host=host, user=user, passwd=passwd, db=db)
+    
+    def log_query(self,query):
+        values = {
+                'src': ip2n(query['src']),
+                'dst': ip2n(query['dst']),
+                'name': query['name'],
+                'type': query['type'],
+                'last_time': query['time'],
+                'hits' : 1
+        }
+
+        fields_str = ','.join(["`%s`" % (key) for key in values.keys()])
+        values_str = ','.join(["'%s'" % (self.db.escape_string(str(value))) for value in values.values()])
+        query = "INSERT INTO `%s` (%s) VALUES (%s) ON DUPLICATE KEY UPDATE \
+                `last_time` = VALUES(`last_time`), \
+                `hits` = `hits` + 1;" % (self.tbl, fields_str, values_str)
+        self.db.cursor().execute(query)
+        self.db.commit()
 
 def get_uid(user):
     return pwd.getpwnam(user).pw_uid
@@ -42,7 +70,7 @@ def parse_query_log(log_fields):
 
     return query
 
-def read_socket(sock):
+def read_socket(sock, logger):
     dgm = sock.recv(1024)
 
     if not dgm:
@@ -55,15 +83,15 @@ def read_socket(sock):
     
     query = parse_query_log(log)
 
-    print '%s %s %s %s -> %s' % (str(query['time']), query['type'], query['name'], query['src'], query['dst'])
+    logger.log_query(query)
 
-def monitor_sockets(socks):
+def monitor_sockets(socks, logger):
 
     while True:
         rd,wr,err = select.select(socks, [], [])
         
         for sock in rd:
-            read_socket(sock)
+            read_socket(sock, logger)
 
 def main():
     parser = argparse.ArgumentParser(description='Parse suricata DNS logs from \
@@ -76,8 +104,10 @@ def main():
 
     socks = init_sockets(args.socket, args.user, args.group)
     drop_privileges(args.user, args.group)
-   
-    monitor_sockets(socks)
+
+    logger = MySQLQueryLogger('dnslog','shockwave','test','test')
+
+    monitor_sockets(socks, logger)
 
 if __name__ == '__main__':
     main()
