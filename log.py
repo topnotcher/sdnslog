@@ -1,8 +1,5 @@
 import socket,os, pwd, grp, datetime, argparse, select
 
-sock_path = '/var/run/suricata-megatron-dns.log'
-
-
 def get_uid(user):
     return pwd.getpwnam(user).pw_uid
 
@@ -21,8 +18,8 @@ def init_sockets(sock_paths, user, group):
     socks = []
 
     for path in sock_paths:
-        if os.path.exists(sock_path):
-            os.remove(sock_path)
+        if os.path.exists(path):
+            os.remove(path)
 
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
         sock.bind(path)
