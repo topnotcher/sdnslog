@@ -123,7 +123,7 @@ def read_config_file(path):
     config = yaml.load(open(path))
 
     if 'mysql' not in config:
-        return 'config missing mysql configuration'
+        raise ValueError('config missing mysql configuration')
 
     for value in ('db','user','pass','host'):
         if value not in config['mysql']:
