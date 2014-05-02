@@ -1,0 +1,77 @@
+#!/bin/sh
+#
+# chkconfig: 2345 35 60
+# description: Process suricata DNS logs into a mysql db
+#
+# processname: sdnslog
+# X-Start-Before 
+# config: /etc/sysconfig/sdnslog
+# config: /etc/suricata/sdnslog.yaml
+# pidfile: /var/run/......EDIT
+
+source /etc/rc.d/init.d/functions
+source /etc/sysconfig/network
+
+
+### Default variables
+SYSCONFIG="/etc/sysconfig/$(basename $0)"
+
+if [ ! -r "$SYSCONFIG" ] ; then 
+	echo "missing configuration: $SYSCONFIG"
+	exit 1
+else
+	source $SYSCONFIG
+fi
+
+
+RETVAL=0
+prog="sdnslog"
+
+start() {
+	echo -n "Starting $prog: "
+
+	OPTS="-d -c $CONFIG --user $USER --group $GROUP"
+	daemon $prog $OPTS
+
+	RETVAL=$?
+
+	return $RETVAL
+}
+
+stop() {
+	echo -n $"Shutting down $desc ($prog): "
+
+	killproc $prog
+	RETVAL=$?
+	return $RETVAL
+}
+
+restart() {
+	stop
+	echo
+	start
+}
+
+case "$1" in
+	start)
+		start
+	;;
+	stop)
+		stop
+	;;
+	restart)
+		restart ;;
+	status)
+		status $prog
+		RETVAL=$?
+	;;
+	dump)
+		dump
+	;;
+	*)
+	echo $"Usage: $0 {start|stop|restart|status|dump}"
+	RETVAL=1
+esac
+
+echo
+exit $RETVAL

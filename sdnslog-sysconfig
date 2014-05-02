@@ -1,0 +1,3 @@
+USER=suricata
+GROUP=suricata
+CONFIG=/etc/suricata/sdnslog.yaml
